@@ -1,11 +1,11 @@
 {
-  "name": "generator-astro",
-  "version": "4.2.3",
-  "description": "Yeoman generator for Astro ExpressJS API",
+  "name": "generator-astro-nodejs",
+  "version": "0.1.0",
+  "description": "Yeoman generator for NodeJS-based microservice",
   "main": "index.js",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/azanium/generator-astro.git"
+    "url": "git+https://github.com/jinified/generator-astro-nodejs.git"
   },
   "keywords": [
     "yeoman-generator",
@@ -13,18 +13,14 @@
     "nodejs",
     "express",
     "expressjs",
-    "astro",
-    "reactjs",
-    "redux",
-    "redux-observable",
-    "rxjs"
+    "astro"
   ],
-  "author": "Suhendra Ahmad <syuaibi@gmail.com>",
+  "author": "Jin <jinified@gmail.com>",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/azanium/generator-astro/issues"
+    "url": "https://github.com/jinified/generator-astro-nodejs/issues"
   },
-  "homepage": "https://github.com/azanium/generator-astro#readme.md",
+  "homepage": "https://github.com/jinified/generator-astro-nodejs#readme.md",
   "dependencies": {
     "decamelize": "^2.0.0",
     "json5": "^1.0.1",

@@ -87,8 +87,8 @@ definitions:
           - echo -e "[profile de-non-prod]\nrole_arn = arn:aws:iam::609208304138:role/bitbucket-pipelines\nsource_profile = default" > ~/.aws/config
           - echo -e "[profile de-prod]\nrole_arn = arn:aws:iam::741224295950:role/bitbucket-pipelines\nsource_profile = default" >> ~/.aws/config
           - export AWS_DEFAULT_PROFILE=de-non-prod
-          - aws apigateway put-rest-api --rest-api-id 9t07vheq1l --mode merge --body file://swagger/swagger.json
-          - aws apigateway create-deployment --rest-api-id 9t07vheq1l --stage-name dev
+          - aws apigateway put-rest-api --rest-api-id ${dev_gateway_id} --mode merge --body file://swagger/swagger.json
+          - aws apigateway create-deployment --rest-api-id ${dev_gateway_id} --stage-name dev
 
     - step: &api_gateway_swagger_staging
         caches:
@@ -186,8 +186,8 @@ definitions:
           - echo -e "[profile de-non-prod]\nrole_arn = arn:aws:iam::609208304138:role/bitbucket-pipelines\nsource_profile = default" > ~/.aws/config
           - echo -e "[profile de-prod]\nrole_arn = arn:aws:iam::741224295950:role/bitbucket-pipelines\nsource_profile = default" >> ~/.aws/config
           - export AWS_DEFAULT_PROFILE=de-non-prod
-          - aws apigateway put-rest-api --rest-api-id 4dxvgm5slc --mode merge --body file://swagger/swagger.json
-          - aws apigateway create-deployment --rest-api-id 4dxvgm5slc --stage-name stg
+          - aws apigateway put-rest-api --rest-api-id ${staging_gateway_id} --mode merge --body file://swagger/swagger.json
+          - aws apigateway create-deployment --rest-api-id ${staging_gateway_id} --stage-name stg
 
     - step: &api_gateway_swagger_production
         caches:
@@ -247,8 +247,8 @@ definitions:
           - echo -e "[default]\naws_access_key_id = $AWS_CENTRAL_ACCESS_KEY_ID\naws_secret_access_key = $AWS_CENTRAL_SECRET_ACCESS_KEY" > ~/.aws/credentials
           - echo -e "[profile de-prod]\nrole_arn = arn:aws:iam::741224295950:role/bitbucket-pipelines\nsource_profile = default" > ~/.aws/config
           - export AWS_DEFAULT_PROFILE=de-prod
-          - aws apigateway put-rest-api --rest-api-id f556zry4vh --mode merge --body file://swagger/swagger.json
-          - aws apigateway create-deployment --rest-api-id f556zry4vh --stage-name prd
+          - aws apigateway put-rest-api --rest-api-id ${prod_gateway_id} --mode merge --body file://swagger/swagger.json
+          - aws apigateway create-deployment --rest-api-id ${prod_gateway_id} --stage-name prd
 
 options:
   docker: true

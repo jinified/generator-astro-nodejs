@@ -3,6 +3,7 @@ const urlJoin = require('url-join');
 const yosay = require('yosay');
 const path = require('path');
 const mkdirp = require('mkdirp');
+const fs = require('fs');
 
 module.exports = class extends Generator {
   constructor(args, opts) {
@@ -11,7 +12,7 @@ module.exports = class extends Generator {
     // Process argument
     this.props = {};
 
-    console.log(yosay('Welcome to Astro generator!'));
+    console.log(yosay('Welcome to Astro NodeJS generator!'));
   }
 
   propmting() {
@@ -24,8 +25,7 @@ module.exports = class extends Generator {
         name: 'kind',
         message: 'What kind of project do you want to create?',
         choices: [
-          { name: 'Service (ExpressJS)', value: 'service' },
-          { name: 'Fullstack (Express JS + React + React Redux + Redux Observable)', value: 'fullstack' }
+          { name: 'Service (ExpressJS)', value: 'service' }
         ],
         default: that.config.get('service') || 'service'
       },
@@ -81,13 +81,13 @@ module.exports = class extends Generator {
         type: 'input',
         name: 'description',
         message: 'Description',
-        default: that.config.get('description') || 'This project generated using Astro Generator'
+        default: that.config.get('description') || 'This project generated using Astro NodeJS Generator'
       },
       {
         type: 'input',
         name: 'author',
         message: `Author's name`,
-        default: that.config.get('author') || 'Suhendra Ahmad'
+        default: that.config.get('author') || 'Jin'
       },
       {
         type: 'input',
@@ -110,9 +110,9 @@ module.exports = class extends Generator {
 
     this.destinationRoot(props.name);
     props.src = props.kind === 'fullstack' ? 'src/server' : 'src';
-    props.client = props.kind === 'fullstack' ? 'src/client' : undefined;
     props.root = 'src';
     props.apiPath = urlJoin(props.src, props.apibase);
+    [, props.servicename] = props.name.split('-');
 
     /**
      * Etc
@@ -141,9 +141,6 @@ module.exports = class extends Generator {
      * boot folder
      */
     copy(tPath('src/boot/startup'), dPath(urlJoin(props.src, 'boot/startup')));
-    if (props.kind !== 'fullstack') {
-      copy(tPath('src/boot/server'), dPath(urlJoin(props.src, 'boot/server')));
-    }
     copyTpl(tPath('src/boot/index.ejs'), dPath(urlJoin(props.src, 'boot/index.js')), props);
 
     /**
@@ -164,14 +161,13 @@ module.exports = class extends Generator {
      * utils
      */
     copy(tPath('src/utils/APIError'), dPath(urlJoin(props.src, 'utils', 'APIError')));
-    mkdirp.sync(path.join(this.destinationPath(), urlJoin(props.src, 'utils', 'ErrorCode')));
-    copy(tPath('src/utils/ErrorCode/index.js'), dPath(urlJoin(props.src, 'utils', 'ErrorCode', 'index.js')));
-    copyTpl(tPath('src/utils/ErrorCode/ErrorCode.js'), dPath(urlJoin(props.src, 'utils', 'ErrorCode', 'ErrorCode.js')), props);
     copy(tPath('src/utils/logger'), dPath(urlJoin(props.src, 'utils', 'logger')));
+    copy(tPath('src/utils/helper'), dPath(urlJoin(props.src, 'utils', 'helper')));
 
     /**
      * middlewares
      */
+    copy(tPath('src/middlewares/auth'), dPath(urlJoin(props.src, 'middlewares', 'auth')));
     copy(tPath('src/middlewares/error'), dPath(urlJoin(props.src, 'middlewares', 'error')));
     copy(tPath('src/middlewares/monitoring'), dPath(urlJoin(props.src, 'middlewares', 'monitoring')));
 
@@ -184,6 +180,11 @@ module.exports = class extends Generator {
     copyTpl(tPath('_package.json.ejs'), dPath('package.json'), props);
 
     /**
+     * Bitbucket
+     */
+    copyTpl(tPath('_bitbucket-pipelines.yml'), dPath('bitbucket-pipelines.yml'), props);
+
+    /**
      * Docker
      */
     copyTpl(tPath('Dockerfile'), dPath('Dockerfile'), props);
@@ -192,28 +193,28 @@ module.exports = class extends Generator {
     copyTpl(tPath('_docker-compose.test.yml'), dPath('docker-compose.test.yml'), props);
     copyTpl(tPath('_docker-compose.prod.yml'), dPath('docker-compose.prod.yml'), props);
 
+    /**
+     * Helm
+     */
+    mkdirp.sync(path.join(this.destinationPath(), urlJoin('helm', props.name, 'templates')));
+    copyTpl(tPath('helm/_prod.yaml'), dPath('helm/prod.yaml'), props);
+    copyTpl(tPath('helm/_dev.yaml'), dPath('helm/dev.yaml'), props);
+    copyTpl(tPath('helm/_staging.yaml'), dPath('helm/staging.yaml'), props);
+    copyTpl(tPath(urlJoin('helm', 'service/_Chart.yaml')), dPath(urlJoin('helm', props.name, 'Chart.yaml')), props);
+    copyTpl(tPath(urlJoin('helm', 'service/_values.yaml')), dPath(urlJoin('helm', props.name, 'values.yaml')), props);
+    copyTpl(tPath(urlJoin('helm', 'service/templates/_controller-hpa.yaml')), dPath(urlJoin('helm', props.name, 'templates/controller-hpa.yaml')), props);
+    copyTpl(tPath(urlJoin('helm', 'service/templates/_deployment.yaml')), dPath(urlJoin('helm', props.name, 'templates/deployment.yaml')), props);
+    copyTpl(tPath(urlJoin('helm', 'service/templates/_ingress.yaml')), dPath(urlJoin('helm', props.name, 'templates/ingress.yaml')), props);
+    copyTpl(tPath(urlJoin('helm', 'service/templates/_service.yaml')), dPath(urlJoin('helm', props.name, 'templates/service.yaml')), props);
+    copyTpl(tPath(urlJoin('helm', 'service/templates/__helpers.tpl')), dPath(urlJoin('helm', props.name, 'templates/_helpers.yaml')), props);
+
+
     if (props.sequelize === 'y') {
       mkdirp.sync(path.join(this.destinationPath(), urlJoin(props.src, 'database', 'migrations')));
       mkdirp.sync(path.join(this.destinationPath(), urlJoin(props.src, 'database', 'seeders')));
       copyTpl(tPath('.sequelizerc'), dPath('.sequelizerc'), props);
       copyTpl(tPath('src/config/database.js'), dPath(urlJoin(props.src, 'config', 'database.js')), props);
       copyTpl(tPath('src/models/index.js'), dPath(urlJoin(props.src, 'models', 'index.js')), props);
-    }
-
-    /**
-     * CLIENT SIDE
-     */
-    if (props.kind === 'fullstack') {
-      const srcRoot = path.dirname(props.src).split(path.sep).pop();
-      copy(tPath('public/favicon.ico'), dPath('public/favicon.ico'), props);
-      copyTpl(tPath('reza.config.ejs'), dPath('reza.config.js'), props);
-      copyTpl(tPath('bootstrap.ejs'), dPath(urlJoin(srcRoot, 'index.js')), props);
-      copyTpl(tPath('src/config/_react.ejs'), dPath(urlJoin(props.src, 'config', 'react.js')), props);
-      copy(tPath('test.setup.js'), dPath('test.setup.js'));
-      copy(tPath('src/views'), dPath(urlJoin(props.src, 'views')));
-      copy(tPath('client'), dPath(props.client));
-      copy(tPath('src/routes'), dPath(urlJoin(props.src, 'routes')));
-      copy(tPath('src/middlewares/client-routes'), dPath(urlJoin(props.src, 'middlewares', 'client-routes')));
     }
 
     this.config.save();
@@ -226,8 +227,8 @@ module.exports = class extends Generator {
       this.config.set('description', props.description);
       this.config.set('author', props.author);
       this.config.set('src', props.src);
-      this.config.set('client', props.client);
       this.config.set('kind', props.kind);
+      this.config.set('servicename', props.servicename);
     });
   }
 

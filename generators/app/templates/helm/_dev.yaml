@@ -1,0 +1,17 @@
+ingress:
+  enabled: true
+  hosts:
+    - api-<%= servicename %>-dev.eco.astro.com.my
+  annotations:
+    kubernetes.io/ingress.class: ingress-apps
+  tls:
+    - hosts:
+      - api-<%= servicename %>-dev.eco.astro.com.my
+      secretName: tls-de-astro
+
+app:
+  env:
+    JWT_AUTH_SECRET: dummy_secret
+
+annotations:
+  iam.amazonaws.com/role: eco-service

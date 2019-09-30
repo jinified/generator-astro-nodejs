@@ -1,0 +1,289 @@
+definitions:
+  caches:
+    yarncustom: /root/.yarn-cache
+  
+  steps:
+    - step: &build-test
+        caches:
+          - node
+          - yarncustom
+        image: node:10-alpine
+        name: install and test
+        script:
+          - export NODE_ENV=test
+          - node -v
+          - npm -v
+          - yarn --version
+          - yarn config set cache-folder /root/.yarn-cache
+          - yarn install --pure-lockfile
+          - yarn test
+        artifacts:
+          - coverage/**
+
+    - step: &scan
+        image: astrodevops/sonar-scanner:latest
+        name: sonarscan
+        script:
+          - export SONAR_URL=http://13.228.70.214:9000
+          - export SONAR_TOKEN=$SONAR_TOKEN
+          - export SONAR_ANALYSIS_MODE=publish
+          - bitbucket-sonar-scanner
+
+    - step: &ecr_develop
+        name: ecr_develop
+        image: atlassian/pipelines-awscli
+        script:
+          - mkdir -p ~/.aws
+          - echo -e "[default]\naws_access_key_id = $AWS_CENTRAL_ACCESS_KEY_ID\naws_secret_access_key = $AWS_CENTRAL_SECRET_ACCESS_KEY" > ~/.aws/credentials
+          - echo -e "[profile de-non-prod]\nrole_arn = arn:aws:iam::609208304138:role/bitbucket-pipelines\nsource_profile = default" > ~/.aws/config
+          - export AWS_DEFAULT_PROFILE=de-non-prod
+          - export ecr_repo=<%= name %>
+          - eval $(aws ecr get-login --region ${AWS_DEFAULT_REGION} --no-include-email)
+          - export BUILD_ID=$BITBUCKET_BUILD_NUMBER
+          - export IMAGE_NAME=$BITBUCKET_REPO_SLUG
+          - docker build -t ${IMAGE_NAME} .
+          - docker tag ${IMAGE_NAME}:latest ${AWS_REGISTRY_URL}/${ecr_repo}:${BUILD_ID}
+          - docker tag ${IMAGE_NAME}:latest ${AWS_REGISTRY_URL}/${ecr_repo}:latest
+          - docker push ${AWS_REGISTRY_URL}/${ecr_repo}
+
+    - step: &api_gateway_swagger_develop
+        caches:
+        - node
+        - yarncustom
+        name: api_gateway_swagger_develop
+        image: astrodevops/node-awscli
+        script:
+          - cp .env.example .env
+          - npm run swagger:dev
+          - rm -rf .env
+        artifacts:
+          - swagger/**
+
+    - step: &deploy_develop
+        name: deploy_develop
+        deployment: develop   # set to develop, staging or production
+        image: astrodevops/helm-kubectl
+        script:
+          - export release=<%= name %>-develop
+          - export chart_path=helm/<%= name %>
+          - export values_files=helm/dev.yaml
+          - export values="replicaCount=1,image.tag=${BITBUCKET_BUILD_NUMBER}"
+          - export prefix=develop
+          - export namespace=develop
+          - export tiller_ns=develop
+          - kubectl config set-cluster $develop_cluster --server=$develop_api_server --insecure-skip-tls-verify=true
+          - kubectl config set-credentials $helm_sa --token=$develop_kubernetes_token
+          - kubectl config set-context $namespace --cluster=$develop_cluster --user=$helm_sa
+          - kubectl config use-context $namespace
+          - helm ls --tiller-namespace $tiller_ns
+          - helm upgrade --install ${release} ${chart_path} --namespace ${namespace} --tiller-namespace ${tiller_ns} -f ${values_files} --set ${values}
+
+    - step: &api_gateway_deploy_develop
+        name: api gateway deploy develop
+        image: atlassian/pipelines-awscli
+        script:
+          - mkdir -p ~/.aws
+          - echo -e "[default]\naws_access_key_id = $AWS_CENTRAL_ACCESS_KEY_ID\naws_secret_access_key = $AWS_CENTRAL_SECRET_ACCESS_KEY" > ~/.aws/credentials
+          - echo -e "[profile de-non-prod]\nrole_arn = arn:aws:iam::609208304138:role/bitbucket-pipelines\nsource_profile = default" > ~/.aws/config
+          - echo -e "[profile de-prod]\nrole_arn = arn:aws:iam::741224295950:role/bitbucket-pipelines\nsource_profile = default" >> ~/.aws/config
+          - export AWS_DEFAULT_PROFILE=de-non-prod
+          - aws apigateway put-rest-api --rest-api-id 9t07vheq1l --mode merge --body file://swagger/swagger.json
+          - aws apigateway create-deployment --rest-api-id 9t07vheq1l --stage-name dev
+
+    - step: &api_gateway_swagger_staging
+        caches:
+        - node
+        - yarncustom
+        name: api_gateway_swagger_staging
+        image: astrodevops/node-awscli
+        script:
+          - cp .env.example .env
+          - npm run swagger:stg
+          - rm -rf .env
+        artifacts:
+          - swagger/**
+
+    - step: &ecr_staging
+        name: ecr_staging
+        image: atlassian/pipelines-awscli
+        script:
+          - mkdir -p ~/.aws
+          - echo -e "[default]\naws_access_key_id = $AWS_CENTRAL_ACCESS_KEY_ID\naws_secret_access_key = $AWS_CENTRAL_SECRET_ACCESS_KEY" > ~/.aws/credentials
+          - echo -e "[profile de-non-prod]\nrole_arn = arn:aws:iam::609208304138:role/bitbucket-pipelines\nsource_profile = default" > ~/.aws/config
+          - export AWS_DEFAULT_PROFILE=de-non-prod
+          - export ecr_repo=<%= name %>
+          - eval $(aws ecr get-login --region ${AWS_DEFAULT_REGION} --no-include-email)
+          - export BUILD_ID=$BITBUCKET_BUILD_NUMBER
+          - export IMAGE_NAME=$BITBUCKET_REPO_SLUG
+          - docker build -t ${IMAGE_NAME} .
+          - docker tag ${IMAGE_NAME}:latest ${AWS_REGISTRY_URL}/${ecr_repo}:${BUILD_ID}
+          - docker tag ${IMAGE_NAME}:latest ${AWS_REGISTRY_URL}/${ecr_repo}:latest
+          - docker push ${AWS_REGISTRY_URL}/${ecr_repo}
+
+    - step: &ecr_staging_with_tag
+        name: ecr_staging_with_tag
+        image: atlassian/pipelines-awscli
+        script:
+          - mkdir -p ~/.aws
+          - echo -e "[default]\naws_access_key_id = $AWS_CENTRAL_ACCESS_KEY_ID\naws_secret_access_key = $AWS_CENTRAL_SECRET_ACCESS_KEY" > ~/.aws/credentials
+          - echo -e "[profile de-non-prod]\nrole_arn = arn:aws:iam::609208304138:role/bitbucket-pipelines\nsource_profile = default" > ~/.aws/config
+          - export AWS_DEFAULT_PROFILE=de-non-prod
+          - export ecr_repo=<%= name %>
+          - eval $(aws ecr get-login --region ${AWS_DEFAULT_REGION} --no-include-email)
+          - export BUILD_ID=$BITBUCKET_BUILD_NUMBER
+          - export IMAGE_NAME=$BITBUCKET_REPO_SLUG
+          - docker build -t ${IMAGE_NAME} .
+          - docker tag ${IMAGE_NAME}:latest ${AWS_REGISTRY_URL}/${ecr_repo}:${BUILD_ID}
+          - docker tag ${IMAGE_NAME}:latest ${AWS_REGISTRY_URL}/${ecr_repo}:${BITBUCKET_TAG}
+          - docker push ${AWS_REGISTRY_URL}/${ecr_repo}
+
+    - step: &deploy_staging
+        name: deploy_staging
+        deployment: staging  # set to test, staging or production
+        image: astrodevops/helm-kubectl
+        script:
+          - export release=<%= name %>-staging
+          - export chart_path=helm/<%= name %>
+          - echo ${chart_path}
+          - export values_files=helm/staging.yaml
+          - export values="replicaCount=1,image.tag=${BITBUCKET_BUILD_NUMBER},app.env.NODE_ENV=staging"
+          - export prefix=staging
+          - export namespace=staging
+          - export tiller_ns=staging
+          - kubectl config set-cluster $staging_cluster --server=$staging_api_server --insecure-skip-tls-verify=true
+          - kubectl config set-credentials $helm_sa --token=$staging_kubernetes_token
+          - kubectl config set-context $namespace --cluster=$staging_cluster --user=$helm_sa
+          - kubectl config use-context $namespace
+          - helm ls --tiller-namespace $tiller_ns
+          - helm upgrade --install ${release} ${chart_path} --namespace ${namespace} --tiller-namespace ${tiller_ns} -f ${values_files} --set ${values}
+
+    - step: &deploy_staging_with_tag
+        name: deploy_staging_with_tag
+        deployment: staging  # set to test, staging or production
+        image: astrodevops/helm-kubectl
+        script:
+          - export release=<%= name %>-staging
+          - export chart_path=helm/<%= name %>
+          - echo ${chart_path}
+          - export values_files=helm/staging.yaml
+          - export values="replicaCount=1,image.tag=${BITBUCKET_TAG},app.env.NODE_ENV=staging"
+          - export prefix=staging
+          - export namespace=staging
+          - export tiller_ns=staging
+          - kubectl config set-cluster $staging_cluster --server=$staging_api_server --insecure-skip-tls-verify=true
+          - kubectl config set-credentials $helm_sa --token=$staging_kubernetes_token
+          - kubectl config set-context $namespace --cluster=$staging_cluster --user=$helm_sa
+          - kubectl config use-context $namespace
+          - helm ls --tiller-namespace $tiller_ns
+          - helm upgrade --install ${release} ${chart_path} --namespace ${namespace} --tiller-namespace ${tiller_ns} -f ${values_files} --set ${values}
+
+    - step: &api_gateway_deploy_staging
+        name: api gateway deploy staging
+        image: atlassian/pipelines-awscli
+        script:
+          - mkdir -p ~/.aws
+          - echo -e "[default]\naws_access_key_id = $AWS_CENTRAL_ACCESS_KEY_ID\naws_secret_access_key = $AWS_CENTRAL_SECRET_ACCESS_KEY" > ~/.aws/credentials
+          - echo -e "[profile de-non-prod]\nrole_arn = arn:aws:iam::609208304138:role/bitbucket-pipelines\nsource_profile = default" > ~/.aws/config
+          - echo -e "[profile de-prod]\nrole_arn = arn:aws:iam::741224295950:role/bitbucket-pipelines\nsource_profile = default" >> ~/.aws/config
+          - export AWS_DEFAULT_PROFILE=de-non-prod
+          - aws apigateway put-rest-api --rest-api-id 4dxvgm5slc --mode merge --body file://swagger/swagger.json
+          - aws apigateway create-deployment --rest-api-id 4dxvgm5slc --stage-name stg
+
+    - step: &api_gateway_swagger_production
+        caches:
+        - node
+        - yarncustom
+        name: api_gateway_production
+        image: node:10-alpine
+        script:
+          - cp .env.example .env
+          - npm run swagger:prd
+          - rm -rf .env
+        artifacts:
+          - swagger/**
+
+    - step: &ecr_prod
+        name: ecr_prod
+        image: atlassian/pipelines-awscli
+        script:
+          - mkdir -p ~/.aws
+          - echo -e "[default]\naws_access_key_id = $AWS_CENTRAL_ACCESS_KEY_ID\naws_secret_access_key = $AWS_CENTRAL_SECRET_ACCESS_KEY" > ~/.aws/credentials
+          - echo -e "[profile de-prod]\nrole_arn = arn:aws:iam::741224295950:role/bitbucket-pipelines\nsource_profile = default" > ~/.aws/config
+          - export AWS_DEFAULT_PROFILE=de-prod
+          - export ecr_repo=<%= name %>
+          - eval $(aws ecr get-login --region ${AWS_DEFAULT_REGION} --no-include-email)
+          - export BUILD_ID=$BITBUCKET_BUILD_NUMBER
+          - export IMAGE_NAME=$BITBUCKET_REPO_SLUG
+          - docker build -t ${IMAGE_NAME} .
+          - docker tag ${IMAGE_NAME}:latest ${AWS_PROD_REGISTRY_URL}/${ecr_repo}:${BUILD_ID}
+          - docker tag ${IMAGE_NAME}:latest ${AWS_PROD_REGISTRY_URL}/${ecr_repo}:${BITBUCKET_TAG}
+          - docker push ${AWS_PROD_REGISTRY_URL}/${ecr_repo}
+
+    - step: &deploy_prod
+        name: deploy prod
+        trigger: manual
+        deployment: production  # set to test, staging or production
+        image: astrodevops/helm-kubectl
+        script:
+          - export release=<%= name %>-prod
+          - export chart_path=helm/<%= name %>
+          - export values_files=helm/prod.yaml
+          - export values="replicaCount=2,image.tag=${BITBUCKET_TAG},app.env.NODE_ENV=production"
+          - export prefix=prod
+          - export namespace=prod
+          - export tiller_ns=prod
+          - kubectl config set-cluster $prod_cluster --server=$prod_api_server --insecure-skip-tls-verify=true
+          - kubectl config set-credentials $helm_sa --token=$prod_kubernetes_token
+          - kubectl config set-context $namespace --cluster=$prod_cluster --user=$helm_sa
+          - kubectl config use-context $namespace
+          - helm ls --tiller-namespace $tiller_ns
+          - helm upgrade --install ${release} ${chart_path} --namespace ${namespace} --tiller-namespace ${tiller_ns} -f ${values_files} --set ${values}
+
+    - step: &api_gateway_deploy_prod
+        name: api gateway deploy prod
+        image: atlassian/pipelines-awscli
+        script:
+          - mkdir -p ~/.aws
+          - echo -e "[default]\naws_access_key_id = $AWS_CENTRAL_ACCESS_KEY_ID\naws_secret_access_key = $AWS_CENTRAL_SECRET_ACCESS_KEY" > ~/.aws/credentials
+          - echo -e "[profile de-prod]\nrole_arn = arn:aws:iam::741224295950:role/bitbucket-pipelines\nsource_profile = default" > ~/.aws/config
+          - export AWS_DEFAULT_PROFILE=de-prod
+          - aws apigateway put-rest-api --rest-api-id f556zry4vh --mode merge --body file://swagger/swagger.json
+          - aws apigateway create-deployment --rest-api-id f556zry4vh --stage-name prd
+
+options:
+  docker: true
+
+pipelines:
+  default:
+    - step: *build-test
+    - step: *scan
+
+  branches:
+    master:
+      - step: *build-test
+      - step: *scan
+      - step: *api_gateway_swagger_staging
+      - step: *ecr_staging
+      - step: *deploy_staging
+      - step: *api_gateway_deploy_staging
+
+    develop:
+      - step: *build-test
+      - step: *scan
+      - step: *api_gateway_swagger_develop
+      - step: *ecr_develop
+      - step: *deploy_develop
+      - step: *api_gateway_deploy_develop
+
+  tags:
+    v*:
+      - step: *build-test
+      - step: *scan
+      - step: *api_gateway_swagger_staging
+      - step: *ecr_staging_with_tag
+      - step: *deploy_staging_with_tag
+      - step: *api_gateway_deploy_staging
+      - step: *api_gateway_swagger_production
+      - step: *ecr_prod
+      - step: *deploy_prod
+      - step: *api_gateway_deploy_prod

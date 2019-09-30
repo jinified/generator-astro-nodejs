@@ -1,0 +1,33 @@
+image:
+  repository: 741224295950.dkr.ecr.ap-southeast-1.amazonaws.com/<%= name %>
+
+ingress:
+  enabled: true
+  hosts:
+    - api-<servicename>.eco.astro.com.my
+  annotations:
+    kubernetes.io/ingress.class: ingress-apps
+  tls:
+    - hosts:
+      - api-<servicename>.eco.astro.com.my
+      secretName: tls-de-astro
+
+app:
+  env:
+    NODE_ENV: production
+    JWT_AUTH_SECRET: 9J2Djwt849kvqCaTCeePzyPnUZjTh
+    
+annotations:
+  iam.amazonaws.com/role: eco-service
+
+resources:
+  requests:
+    cpu: 200m
+    memory: 250Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 40
+  targetCPUUtilizationPercentage: 50
+  targetMemoryUtilizationPercentage: 70

@@ -1,0 +1,30 @@
+ingress:
+  enabled: true
+  hosts:
+    - api-<%= servicename %>-stg.eco.astro.com.my
+  annotations:
+    kubernetes.io/ingress.class: ingress-apps
+  tls:
+    - hosts:
+      - api-<%= servicename %>-stg.eco.astro.com.my
+      secretName: tls-de-astro
+
+app:
+  env:
+    NODE_ENV: staging
+    JWT_AUTH_SECRET: 8F659AB63EB8F763D27A3DB731A2D
+
+annotations:
+  iam.amazonaws.com/role: eco-service
+
+resources:
+  requests:
+    cpu: 200m
+    memory: 250Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 40
+  targetCPUUtilizationPercentage: 50
+  targetMemoryUtilizationPercentage: 70
